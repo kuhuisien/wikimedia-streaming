@@ -6,6 +6,9 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultConnectionKeepAliveStrategy;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
@@ -16,11 +19,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Properties;
 
 public class OpenSearchConsumer {
     public static RestHighLevelClient createOpenSearchClient() {
         String connString = "http://localhost:9200";
-//        String connString = "https://c9p5mwld41:45zeygn9hy@kafka-course-2322630105.eu-west-1.bonsaisearch.net:443";
 
         // we build a URI from the connection string
         RestHighLevelClient restHighLevelClient;
@@ -51,6 +54,24 @@ public class OpenSearchConsumer {
         return restHighLevelClient;
     }
 
+    private static KafkaConsumer<String, String> createKafkaConsumer() {
+        String bootstrapServers = "127.0.0.1:9092";
+        String groupId = "consumer-opensearch";
+
+        // create consumer configs
+        Properties properties = new Properties();
+        properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        properties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        // only first time lauching this groupId, it reads from 0 offset
+        // onwards it starts reading from offset where it is committed the readConsumerDemo
+        properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+
+        // create consumer
+        return new KafkaConsumer<>(properties);
+    }
+
     public static void main(String[] args) throws IOException {
         Logger log = LoggerFactory.getLogger(OpenSearchConsumer.class.getSimpleName());
 
@@ -58,9 +79,10 @@ public class OpenSearchConsumer {
         RestHighLevelClient openSearchClient = createOpenSearchClient();
 
         // create kafka client
+        KafkaConsumer<String, String> kafkaConsumer = createKafkaConsumer();
 
         // create index on OpenSearch if it does not exist
-        try(openSearchClient) {
+        try(openSearchClient; kafkaConsumer) {
             boolean indexExists =
                     openSearchClient.indices().exists(new GetIndexRequest("wikimedia"), RequestOptions.DEFAULT);
 
@@ -73,7 +95,5 @@ public class OpenSearchConsumer {
             }
 
         }
-
-
     }
 }
